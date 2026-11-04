@@ -1,0 +1,234 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quotesync-meta-step0 MVP</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:0 12px 40px;background:#f7f8fa;color:#222}
+.banner{position:sticky;top:0;background:#fff3cd;border-bottom:2px solid #e69500;padding:10px;font-weight:bold;z-index:10}
+header.top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0}
+h1{font-size:20px;margin:6px 0}
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:10px 14px;min-width:140px;flex:1}
+.card b{font-size:22px;display:block}
+.notice{background:#fff;border:1px solid #ccc;border-radius:8px;padding:8px 10px;font-size:13px;margin:10px 0}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px}
+button{padding:6px 10px;border-radius:6px;border:1px solid #888;background:#fff;cursor:pointer;font-size:13px}
+button.primary{background:#1565c0;color:#fff;border-color:#1565c0}
+button.danger{border-color:#c62828;color:#c62828}
+button:disabled{opacity:.5;cursor:not-allowed}
+.table-wrap{overflow-x:auto;background:#fff;border:1px solid #ddd;border-radius:8px;margin:10px 0}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{border-bottom:1px solid #e5e5e5;padding:8px;font-size:13px;vertical-align:top;text-align:left}
+th{background:#f0f2f5}
+.ok{background:#e8f5e9}.missing{background:#fff9c4}.unread{background:#ffcdd2}.conflict{background:#ffe0b2}.none{background:#eee}.resolved{background:#e3f2fd}
+.small{font-size:12px;color:#555}
+.block{border:2px solid #c62828;background:#fdecea;padding:10px;border-radius:8px;margin:10px 0}
+.go{border:2px solid #2e7d32;background:#e8f5e9;padding:10px;border-radius:8px;margin:10px 0}
+.diff{background:#fff8e1;border:1px solid #cc0;padding:8px;border-radius:8px;margin:8px 0;font-size:13px}
+.edit{background:#fafafa;border:1px dashed #888;padding:8px;border-radius:8px}
+.edit input{width:100%;margin:4px 0;padding:6px}
+.item-head{background:#fff;border:1px solid #ddd;border-radius:8px 8px 0 0;padding:8px 10px;margin:14px 0 0;font-weight:bold}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}th,td{font-size:12px}h1{font-size:17px}}
+.cost{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="banner">가상 샘플 테스트 · 실제 API 호출 없음 (simulated) · 발송 없음 · 샘플 모드</div>
+<header class="top">
+<div><h1>QuoteSync Meta Step0 — 검토·승인</h1>
+<div class="small">품목 확인 → 수정 → 승인 → RFQ 초안 · 새로고침해도 유지(localStorage) · 서버·외부API 없음</div></div>
+</header>
+
+<div class="cards">
+<div class="card">전체 항목<b id="cTotal">-</b><span class="small">필드 수</span></div>
+<div class="card">승인 완료<b id="cOk">-</b><span class="small">승인된 필드</span></div>
+<div class="card">미해결<b id="cBad">-</b><span class="small">누락·판독불가·상충·보류</span></div>
+<div class="card">RFQ<b id="cRfq">-</b><span class="small">유효 초안 수</span></div>
+</div>
+
+<div class="toolbar">
+<label>샘플 <select id="sel">
+<option value="A">A 정상 (00412-03)</option>
+<option value="B">B 누락·무처리 (00789-02/03/04)</option>
+<option value="C">C 상충 (00321-10)</option>
+</select></label>
+<button id="btnLoad" class="primary">불러오기</button>
+<button id="btnRe">가상 재분석 (v+1)</button>
+<button id="btnReset" class="danger">작업 초기화</button>
+<span id="ver" class="small"></span>
+</div>
+<div id="storageNotice" class="notice" role="status" hidden></div>
+<div id="diff" aria-live="polite"></div>
+<div id="list"></div>
+<div id="msg"></div>
+<div class="toolbar">
+<button id="btnRfq" class="primary">[RFQ 초안 만들기 — 승인값만]</button>
+<button id="btnCsv">RFQ CSV 다운로드</button>
+<span class="small">미해결·보류·미승인이 1개라도 있으면 차단됩니다. 이유는 아래 박스에서 확인.</span>
+</div>
+<div id="rfq"></div>
+
+<div class="grid2">
+<div class="cost">
+<h3>예시 단가 계산 (보조, 호출 없음)</h3>
+<div class="small">참고 단가: 입력 $1.25/100만, 출력 $4.25/100만. 실제 Billing 확인 아님. STOP 유지.</div>
+<p>입력 토큰 <input id="inT" value="2000" size="8"> 출력 토큰 <input id="outT" value="2000" size="8">
+<button id="btnCost">계산</button></p>
+<div id="cost" class="small"></div>
+</div>
+<div class="notice">
+<b>안내</b><br>
+· 가상 재분석은 실제 AI 분석이 아닙니다.<br>
+· RFQ 초안과 실제 발송은 분리되며 발송 버튼은 없습니다.<br>
+· 현재 화면은 브라우저 내부 검증이며 서버 권한 검증은 향후 작업입니다.<br>
+· QuoteSync 원본 코드는 사용하지 않았고 새 프로젝트 기준입니다.
+</div>
+</div>
+
+<script>
+"use strict";
+var LSKEY="quotesync-meta-step0-v1";
+var LABELS={partNo:"품번",partName:"품명",material:"재질",surface:"표면처리",qty:"수량"};
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function trim2(s){return String(s==null?"":s).replace(/^\s+|\s+$/g,"");}
+function F(v,st,doc,page,q){return {draft:v,status:st,doc:doc,page:page,quote:q,cur:v,curSt:st,over:null,appr:null,hold:null,orig:st};}
+function buildA(){return {id:"SAMPLE-A-v1",dv:1,items:[{key:"A-1",qn:2,qu:"EA",f:{partNo:F("00412-03","OK","SAMPLE-A","P1","품번: 00412-03"),partName:F("가상 브라켓-A","OK","SAMPLE-A","P1","품명: 가상 브라켓-A"),material:F("AL6061-T6","OK","SAMPLE-A","P1","재질: AL6061-T6"),surface:F("아노다이징","OK","SAMPLE-A","P1","표면처리: 아노다이징"),qty:F("2 EA","OK","SAMPLE-A","P1","수량: 2 EA")}}],rfqs:[],seq:0};}
+function buildB(){return {id:"SAMPLE-B-v1",dv:1,items:[
+{key:"B-1",qn:null,qu:null,f:{partNo:F("00789-02","OK","SAMPLE-B","P1","품번: 00789-02"),partName:F("가상 플레이트-B1","OK","SAMPLE-B","P1","품명: 가상 플레이트-B1"),material:F("","MISSING","SAMPLE-B","P1","(빈칸 - 기재 없음)"),surface:F("무처리","EXPLICIT_NONE","SAMPLE-B","P1","표면처리: 무처리"),qty:F("","UNREADABLE","SAMPLE-B","P1","[번짐으로 판독 불가]")}},
+{key:"B-2",qn:2,qu:"SET",f:{partNo:F("00789-03","OK","SAMPLE-B","P1","품번: 00789-03"),partName:F("가상 스페이서-B2","OK","SAMPLE-B","P1","품명: 가상 스페이서-B2"),material:F("SUS304","OK","SAMPLE-B","P1","재질: SUS304"),surface:F("","MISSING","SAMPLE-B","P1","(빈칸)"),qty:F("2 SET","OK","SAMPLE-B","P1","수량: 2 SET")}},
+{key:"B-3",qn:2.5,qu:"m",f:{partNo:F("00789-04","OK","SAMPLE-B","P1","품번: 00789-04"),partName:F("가상 바-B3","OK","SAMPLE-B","P1","품명: 가상 바-B3"),material:F("C1020","OK","SAMPLE-B","P1","재질: C1020"),surface:F("","MISSING","SAMPLE-B","P1","(빈칸)"),qty:F("2.5 m","OK","SAMPLE-B","P1","규격: 25.4mm x 2.5m")}}],rfqs:[],seq:0};}
+function buildC(){return {id:"SAMPLE-C-v1",dv:1,items:[{key:"C-1",qn:4,qu:"EA",f:{partNo:F("00321-10","OK","SAMPLE-C","P1","품번: 00321-10"),partName:F("가상 하우징-C","OK","SAMPLE-C","P1","품명: 가상 하우징-C"),material:F("SUS304 vs SUS316","CONFLICT","SAMPLE-C","P1 vs P2",'P1 "SUS304" / P2 REV B "SUS316, 변경 검토중(미확정)"'),surface:F("","MISSING","SAMPLE-C","P1","(빈칸)"),qty:F("4 EA","OK","SAMPLE-C","P1","수량: 4 EA")}}],rfqs:[],seq:0};}
+function freshStore(){return {A:buildA(),B:buildB(),C:buildC()};}
+var store=freshStore();var cur="A";var editing=null;
+function storageNotice(message){var n=document.getElementById("storageNotice");n.hidden=!message;n.textContent=message;}
+function save(){try{localStorage.setItem(LSKEY,JSON.stringify({store:store,cur:cur}));document.getElementById("ver").textContent=store[cur].id+" / 가상초안 v"+store[cur].dv+" / 브라우저 저장 완료";}catch(e){storageNotice("브라우저 저장을 사용할 수 없습니다. 현재 작업은 새로고침하면 사라질 수 있습니다.");document.getElementById("ver").textContent="현재 화면에서만 유지 · 저장 실패";}}
+function load(){try{var raw=localStorage.getItem(LSKEY);if(!raw)return;var o=JSON.parse(raw);var keys=Object.keys(LABELS);var valid=o&&o.store&&["A","B","C"].every(function(key){var st=o.store[key];return st&&Number.isSafeInteger(st.dv)&&st.dv>0&&Number.isSafeInteger(st.seq)&&Array.isArray(st.rfqs)&&st.rfqs.every(function(r){return r&&Array.isArray(r.rows);})&&Array.isArray(st.items)&&st.items.length&&st.items.every(function(it){return it&&it.f&&keys.every(function(k){var f=it.f[k];return f&&typeof f.cur==="string"&&typeof f.curSt==="string"&&typeof f.draft==="string";});});});if(!valid)throw new Error("invalid saved state");store=o.store;cur=["A","B","C"].includes(o.cur)?o.cur:"A";}catch(e){storageNotice("저장된 작업을 읽을 수 없어 샘플로 시작했습니다.");}}
+function eff(f){return f.over?f.over.v:f.cur;}
+function cls(s){if(s==="OK")return "ok";if(s==="MISSING")return "missing";if(s==="UNREADABLE")return "unread";if(s==="CONFLICT")return "conflict";if(s==="EXPLICIT_NONE")return "none";return "resolved";}
+function parseQ(s){var m=/^\s*([0-9]+(?:\.[0-9]+)?)\s*([A-Za-z가-힣]+)\s*$/.exec(String(s==null?"":s));if(!m)return null;var n=Number(m[1]);if(!Number.isFinite(n)||!(n>0))return null;return {n:n,u:m[2]};}
+function isNone(s){var t=trim2(s);return t==="무처리"||t==="없음"||t==="N/A"||t==="No coating";}
+function killRfq(reason){var n=0;store[cur].rfqs.forEach(function(x){if(x.st==="초안"){x.st="이전 버전 · 사용 불가";x.why=reason;n++;}});return n;}
+function check(){var a=[];store[cur].items.forEach(function(it){Object.keys(LABELS).forEach(function(k){var f=it.f[k];if(f.hold){a.push(it.key+" "+LABELS[k]+": 판단보류 중");return;}if(f.curSt==="MISSING"||f.curSt==="UNREADABLE"||f.curSt==="CONFLICT"){a.push(it.key+" "+LABELS[k]+": "+f.curSt+" 미해결");return;}if(!f.appr)a.push(it.key+" "+LABELS[k]+": 미승인");});});return a;}
+function renderStats(){var t=0,o=0,b=0;store[cur].items.forEach(function(it){Object.keys(LABELS).forEach(function(k){t++;var f=it.f[k];if(f.appr)o++;if(f.hold||f.curSt==="MISSING"||f.curSt==="UNREADABLE"||f.curSt==="CONFLICT")b++;});});document.getElementById("cTotal").textContent=t;document.getElementById("cOk").textContent=o;document.getElementById("cBad").textContent=b;var valid=store[cur].rfqs.filter(function(x){return x.st==="초안";}).length;document.getElementById("cRfq").textContent=valid;}
+function render(){
+var st=store[cur];
+document.getElementById("sel").value=cur;
+document.getElementById("ver").textContent=st.id+" / 가상초안 v"+st.dv+" / 저장됨(localStorage)";
+var h="";
+st.items.forEach(function(it,i){
+h+='<div class="item-head">'+esc(it.key)+' · 품번이 같아도 자동 합치기 안 함 · 수량 원문 '+esc(it.f.qty.draft===""?"(없음)":it.f.qty.draft)+' / 숫자 '+esc(it.qn==null?"(없음)":String(it.qn))+' / 단위 '+esc(it.qu==null?"(없음)":it.qu)+'</div>';
+h+='<div class="table-wrap"><table><tr><th>항목</th><th>초안 추출값</th><th>사용자 수정값</th><th>상태</th><th>근거·이력</th><th>작업</th></tr>';
+Object.keys(LABELS).forEach(function(k){
+var f=it.f[k];
+var draftTxt=(f.draft===""?"(비어있음)":f.draft)+" ["+f.status+"]";
+var overTxt=f.over?f.over.v+" (수정자 "+f.over.by+")":"-";
+var src=f.over?("사용자 입력 / 수정자:"+f.over.by+" / 이유:"+f.over.rs+" / 근거:"+f.over.ev+" / 원래:"+f.orig):("문서 "+f.doc+" / "+f.page+" / \u201C"+f.quote+"\u201D / 원래:"+f.orig);
+src="문서 "+f.doc+" / "+f.page+" / “"+f.quote+"”"+(f.over?" | "+src:"");
+var stx=f.curSt+(f.appr?" ✅승인됨":"")+(f.hold?" ⏸보류":"");
+h+='<tr class="'+cls(f.curSt)+'"><td><b>'+LABELS[k]+'</b><br><span class="small">'+k+'</span></td><td>'+esc(draftTxt)+'<br><span class="small">최신 추출: '+esc(f.cur)+' ['+esc(f.status)+']</span></td><td>'+esc(overTxt)+'</td><td>'+esc(stx)+'</td><td class="small">'+esc(src)+'</td>';
+h+='<td><button data-a="edit" data-i="'+i+'" data-k="'+k+'">수정</button><button data-a="appr" data-i="'+i+'" data-k="'+k+'">승인</button><button data-a="hold" data-i="'+i+'" data-k="'+k+'">판단보류</button><button data-a="release" data-i="'+i+'" data-k="'+k+'">보류 해제</button></td></tr>';
+if(editing&&editing.i===i&&editing.k===k){
+h+='<tr><td colspan="6"><div class="edit"><b>'+esc(it.key+" "+LABELS[k])+' 수정</b><br>값 <input id="ev" value="'+esc(f.over?f.over.v:"")+'">수정자 <input id="eb" value="'+esc(f.over?f.over.by:"")+'">이유 <input id="er" value="'+esc(f.over?f.over.rs:"")+'">확인 근거 <input id="ee" value="'+esc(f.over?f.over.ev:"")+'"><br><span class="small">4개 모두 필수. 수량은 예 3 EA / 2 SET / 2.5 m. N/A로 재질·수량 해결 불가.</span><br><button data-a="save" data-i="'+i+'" data-k="'+k+'" class="primary">저장</button> <button data-a="cancel">취소</button><div id="eerr" class="small"></div></div></td></tr>';
+}
+});
+h+='</table></div>';
+});
+document.getElementById("list").innerHTML=h;
+var iss=check();
+var m=document.getElementById("msg");
+var btn=document.getElementById("btnRfq");
+if(iss.length){m.innerHTML='<div class="block"><b>[RFQ 초안 만들기 불가]</b><br>'+iss.map(esc).join("<br>")+'<br><span class="small">위 항목을 해결하고 승인해야 생성됩니다.</span></div>';btn.disabled=true;}
+else{m.innerHTML='<div class="go"><b>[승인 완료]</b> RFQ 초안 만들기 가능 (브라우저 내부 검증)</div>';btn.disabled=false;}
+renderStats();showRfq();save();
+}
+function showRfq(){var st=store[cur];var h="<h3>RFQ 미리보기 (승인값 복사본만)</h3>";if(!st.rfqs.length)h+='<p class="small">아직 RFQ 없음</p>';st.rfqs.forEach(function(r){h+="<p><b>RFQ v"+r.v+" — "+esc(r.st)+"</b>"+(r.why?" <span class='small'>"+esc(r.why)+"</span>":"")+"</p>";h+='<div class="table-wrap"><table><tr><th>항목</th><th>품번</th><th>품명</th><th>재질</th><th>표면처리</th><th>수량</th><th>단위</th><th>구분</th></tr>';r.rows.forEach(function(x){h+="<tr><td>"+esc(x.key)+"</td><td>"+esc(x.pn)+"</td><td>"+esc(x.nm)+"</td><td>"+esc(x.mt)+"</td><td>"+esc(x.sf)+"</td><td>"+esc(x.q)+"</td><td>"+esc(x.u)+"</td><td>"+esc(x.nt)+"</td></tr>";});h+="</table></div>";});h+='<p class="small">RFQ 초안은 발송이 아님. 실제 발송 기능 없음.</p>';document.getElementById("rfq").innerHTML=h;}
+document.getElementById("list").addEventListener("click",function(e){
+var b=e.target.closest?e.target.closest("button"):null;if(!b)return;
+var a=b.getAttribute("data-a");if(!a)return;
+var i=parseInt(b.getAttribute("data-i"),10);var k=b.getAttribute("data-k");
+if(a==="edit"){editing={i:i,k:k};render();}
+else if(a==="cancel"){editing=null;render();}
+else if(a==="save"){onSave(i,k);}
+else if(a==="appr"){onAppr(i,k);}
+else if(a==="hold"){onHold(i,k);}
+else if(a==="release"){store[cur].items[i].f[k].hold=null;render();}
+});
+function onSave(i,k){
+var st=store[cur];var it=st.items[i];var f=it.f[k];
+var v=trim2(document.getElementById("ev").value);
+var by=trim2(document.getElementById("eb").value);
+var rs=trim2(document.getElementById("er").value);
+var ev=trim2(document.getElementById("ee").value);
+var er=document.getElementById("eerr");
+function fail(m){er.textContent=m;}
+if(!v||!by||!rs||!ev){fail("값·수정자·이유·근거를 모두 입력하세요.");return;}
+if((k==="material"||k==="qty")&&/^N\/A$/i.test(v)){fail("재질·수량의 N/A는 자동 정상 처리 불가.");return;}
+if(k==="qty"){var p=parseQ(v);if(!p){fail("수량은 숫자와 단위가 함께 있어야 합니다. 예: 3 EA");return;}
+f.over={v:v,by:by,rs:rs,ev:ev};it.qn=p.n;it.qu=p.u;}
+else{f.over={v:v,by:by,rs:rs,ev:ev};}
+if(f.curSt==="MISSING"||f.curSt==="UNREADABLE"||f.curSt==="CONFLICT"){if(k==="surface"&&isNone(v)){f.curSt="EXPLICIT_NONE";f.cur=v;}else{f.curSt="RESOLVED";f.cur=v;}}
+else{f.cur=v;}
+f.hold=null;f.appr=null;editing=null;
+var n=killRfq(it.key+" "+LABELS[k]+" 수정으로 즉시 무효화");
+render();if(n)alert("기존 RFQ "+n+"건이 이전 버전으로 표시됐습니다.");
+}
+function onAppr(i,k){
+var st=store[cur];var f=st.items[i].f[k];
+if(f.hold){alert("판단보류 중이라 승인 불가.");return;}
+if(f.curSt==="MISSING"||f.curSt==="UNREADABLE"||f.curSt==="CONFLICT"){alert("미해결 상태는 승인 불가. 먼저 수정으로 해결하세요.");return;}
+var v=eff(f);if(!trim2(v)){alert("빈 값은 승인 불가.");return;}
+if((k==="qty"||k==="material")&&/^N\/A$/i.test(trim2(v))){alert("N/A 불가.");return;}
+if(k==="qty"&&!parseQ(v)){alert("수량 형식 오류.");return;}
+if(f.over&&(!trim2(f.over.by)||!trim2(f.over.rs)||!trim2(f.over.ev))){alert("수정자·이유·근거 필요.");return;}
+f.appr={v:v,dv:st.dv,by:f.over?f.over.by:"문서",kind:f.over?"사용자 입력":"문서 추출"};
+render();
+}
+function onHold(i,k){var st=store[cur];var f=st.items[i].f[k];f.hold={n:"근거 부족으로 보류"};f.appr=null;editing=null;killRfq(st.items[i].key+" "+LABELS[k]+" 보류로 즉시 무효화");render();}
+document.getElementById("btnLoad").onclick=function(){cur=document.getElementById("sel").value;editing=null;document.getElementById("diff").innerHTML="";render();};
+document.getElementById("sel").onchange=function(){cur=this.value;editing=null;document.getElementById("diff").innerHTML="";render();};
+document.getElementById("btnReset").onclick=function(){if(!confirm("작업 상태를 초기화할까요?"))return;try{localStorage.removeItem(LSKEY);}catch(e){storageNotice("브라우저 저장소 초기화에 실패했습니다.");}store=freshStore();cur="A";editing=null;document.getElementById("diff").innerHTML="";render();};
+document.getElementById("btnRe").onclick=function(){
+var st=store[cur];var nx=st.dv+1;var d=[];
+function ch(it,k,nv,nst,ndoc,npage,nq){var f=it.f[k];var old=JSON.stringify([f.cur,f.status,f.doc,f.page,f.quote]);f.cur=nv;f.status=nst;f.doc=ndoc;f.page=npage;f.quote=nq;f.curSt=f.over?(k==="surface"&&isNone(f.over.v)?"EXPLICIT_NONE":"RESOLVED"):nst;var nw=JSON.stringify([nv,nst,ndoc,npage,nq]);if(old!==nw){d.push(it.key+" "+LABELS[k]+": 근거 또는 추출값 변경 → 재승인 필요");f.appr=null;}}
+
+if(st.dv===1&&cur==="B"){var it2=st.items[1];ch(it2,"material","SUS304 vs SUS304L","CONFLICT","SAMPLE-B","P1 vs P2","P2 추가메모 SUS304L");}
+else if(st.dv===1&&cur==="C"){var itc=st.items[0];ch(itc,"material","SUS304 vs SUS316","CONFLICT","SAMPLE-C","P1 vs P2","P2 REV B 재확인, 변경 검토중(미확정)");}
+st.dv=nx;save();
+var box=document.getElementById("diff");
+if(!d.length)box.innerHTML='<div class="diff">가상 재분석 v'+nx+' 생성. 바뀐 근거 없음. 사용자 수정값 유지. (실제 AI 분석 아님)</div>';
+else{box.innerHTML='<div class="diff">가상 재분석 v'+nx+' 생성. '+esc(d.join(", "))+' 사용자 수정값은 유지됩니다. (실제 AI 분석 아님)</div>';killRfq("가상 재분석 변경으로 즉시 무효화");}
+render();
+};
+document.getElementById("btnRfq").onclick=function(){
+var st=store[cur];var iss=check();if(iss.length){alert("차단\n"+iss.join("\n"));return;}
+st.rfqs.forEach(function(x){if(x.st==="초안"){x.st="이전 버전 · 사용 불가";x.why="새 RFQ 생성으로 구버전화";}});
+st.seq++;var rows=st.items.map(function(it){function g(k){return it.f[k].appr?it.f[k].appr.v:"";}var qa=it.f.qty.appr;var qv=g("qty");var u="";var m=/([A-Za-z가-힣]+)\s*$/.exec(qv);if(m)u=m[1];return {key:it.key,pn:g("partNo"),nm:g("partName"),mt:g("material"),sf:g("surface"),q:qv,u:u,nt:it.f.qty.appr?(it.f.qty.appr.kind||""):""};});
+st.rfqs.push({v:st.seq,rows:rows,st:"초안"});save();showRfq();renderStats();
+};
+document.getElementById("btnCsv").onclick=function(){
+var st=store[cur];var r=null;for(var i=st.rfqs.length-1;i>=0;i--){if(st.rfqs[i].st==="초안"){r=st.rfqs[i];break;}}
+if(!r){alert("유효한 RFQ 초안이 없습니다.");return;}
+var head=["항목","품번","품명","재질","표면처리","수량","단위","구분"];
+function qc(s){s=String(s==null?"":s);if(/^[\s]*[=+@-]/.test(s))s="'"+s;if(s.indexOf(",")>=0||s.indexOf('"')>=0||s.indexOf("\n")>=0||s.indexOf("\r")>=0)return '"'+s.replace(/"/g,'""')+'"';return s;}
+var lines=["\uFEFF"+head.join(",")];
+r.rows.forEach(function(x){lines.push([x.key,x.pn,x.nm,x.mt,x.sf,x.q,x.u,x.nt].map(qc).join(","));});
+var blob=new Blob([lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="rfq-"+cur+"-v"+r.v+".csv";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);
+};
+document.getElementById("btnCost").onclick=function(){
+var o=document.getElementById("cost");
+var a=trim2(document.getElementById("inT").value),b=trim2(document.getElementById("outT").value);
+if(a===""||b===""){o.textContent="오류: 토큰 수를 입력하세요.";return;}
+var x=Number(a),y=Number(b);
+if(Math.floor(x)!==x||Math.floor(y)!==y||x<0||y<0||!isFinite(x)||!isFinite(y)){o.textContent="오류: 0 이상의 정수를 입력하세요.";return;}
+var c=(x/1000000*1.25)+(y/1000000*4.25);
+o.textContent="예시 단가 계산: $"+c.toFixed(5)+" (입력 "+x+"×$1.25/M + 출력 "+y+"×$4.25/M). Billing 확인 아님. 실제 호출 0회.";
+};
+load();render();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "quotesync-meta-step0",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone Korean simulated RFQ review prototype; no live API calls",
+  "scripts": { "test": "node --test" },
+  "engines": { "node": ">=22" }
+}
